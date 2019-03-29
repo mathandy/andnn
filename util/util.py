@@ -413,7 +413,7 @@ def color_image(image, num_classes=20):
 
 def walk_and_transform_files_in_place(root_dir, transform_fcn,
                                       filter_fcn=None,
-                                      allow_exceptions=True,
+                                      raise_exceptions=True,
                                       remove_problem_files=False):
     """Walk through `root_dir` applying `transform_fcn` to each image."""
     for directory, _, files in os.walk(root_dir):
@@ -422,7 +422,7 @@ def walk_and_transform_files_in_place(root_dir, transform_fcn,
         relative_path = os.path.sep.join(directory.split(os.path.sep)[-2:])
         with Timer("Processing files in " + relative_path):
             for fn in files:
-                fn_full = os.path.join(root_dir, directory, fn)
+                fn_full = os.path.join(directory, fn)
                 if not filter_fcn(fn_full):
                     continue
                 try:
@@ -431,7 +431,7 @@ def walk_and_transform_files_in_place(root_dir, transform_fcn,
                     print("\nThe follwoing exception was encountered "
                           "processing '%s' (file will be removed):\n%s" 
                           "" % (fn, exception))
-                    if not allow_exceptions:
+                    if raise_exceptions:
                         raise
                     if remove_problem_files:
                         os.remove(fn_full)
@@ -439,9 +439,9 @@ def walk_and_transform_files_in_place(root_dir, transform_fcn,
 
 def walk_and_transform_images_in_place(root_dir, transform_fcn,
                                        filter_fcn=is_jpeg_or_png,
-                                       allow_exceptions=True,
+                                       raise_exceptions=True,
                                        remove_problem_files=False):
     walk_and_transform_files_in_place(
         root_dir=root_dir, transform_fcn=transform_fcn, filter_fcn=filter_fcn,
-        allow_exceptions=allow_exceptions,
+        raise_exceptions=raise_exceptions,
         remove_problem_files=remove_problem_files)
