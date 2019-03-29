@@ -206,7 +206,7 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
         try:
             from datumbox_model import DatumboxUnet
         except:
-            from .datumbox_model import DatumboxUnet
+            from .datumbox_unet import DatumboxUnet
         model = DatumboxUnet(backbone_name=backbone,
                              encoder_weights=encoder_weights,
                              encoder_freeze=True)
