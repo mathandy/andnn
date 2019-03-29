@@ -30,7 +30,7 @@ try:
     from visualize import visualize
 except:
     from .iotools import get_data_generators
-    from .visualize import visualize
+    from ..visualize import visualize
 
 
 class VisualValidation(Callback):
