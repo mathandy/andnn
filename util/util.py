@@ -40,6 +40,39 @@ def is_jpeg_or_png(fn):
     return os.path.splitext(fn)[1][1:].lower() in ('jpg', 'jpeg', 'png')
 
 
+def resize_preserving_aspect_ratio(image, dsize, output=None, color=(0, 0, 0),
+                                   interpolation=cv.INTER_LANCZOS4):
+    """Resize image, using padding if necessary to avoid warping.
+
+    dsize = (w, h)
+    """
+
+    if isinstance(image, str):
+        image = cv.imread(image)
+
+    image_apect_ratio = image.shape[0] / image.shape[1]
+    desired_apect_ratio = dsize[1] / dsize[0]
+
+    if image_apect_ratio > desired_apect_ratio:  # must pad to widen
+        image = rescale_by_height(image, dsize[1], method=interpolation)
+    elif image_apect_ratio < desired_apect_ratio:
+        image = rescale_by_width(image, dsize[0], method=interpolation)
+    else:
+        image = cv.resize(src=image, dsize=dsize, interpolation=interpolation)
+
+    dh, dw = dsize[1] - image.shape[0], dsize[0] - image.shape[1]
+    top, bottom = dh//2, dh - (dh//2)
+    left, right = dw//2, dw - (dw//2)
+
+    image = cv.copyMakeBorder(src=image,
+                              top=top, bottom=bottom, left=left, right=right,
+                              borderType=cv.BORDER_CONSTANT,
+                              value=color)
+    if output is not None:
+        cv.imwrite(filename=output, img=image)
+    return image
+
+
 def resize_images(images, max_dim=None, img_shape=None,
                   interpolation=cv.INTER_LANCZOS4):
     assert max_dim or img_shape and not (max_dim and img_shape)
@@ -376,3 +409,39 @@ def color_image(image, num_classes=20):
     norm = mpl.colors.Normalize(vmin=0., vmax=num_classes)
     mycm = mpl.cm.get_cmap('Set1')
     return mycm(norm(image))
+
+
+def walk_and_transform_files_in_place(root_dir, transform_fcn,
+                                      filter_fcn=None,
+                                      allow_exceptions=True,
+                                      remove_problem_files=False):
+    """Walk through `root_dir` applying `transform_fcn` to each image."""
+    for directory, _, files in os.walk(root_dir):
+        if not files:
+            continue
+        relative_path = os.path.sep.join(directory.split(os.path.sep)[-2:])
+        with Timer("Processing files in " + relative_path):
+            for fn in files:
+                fn_full = os.path.join(root_dir, directory, fn)
+                if not filter_fcn(fn_full):
+                    continue
+                try:
+                    transform_fcn(fn_full, fn_full)
+                except Exception as exception:
+                    print("\nThe follwoing exception was encountered "
+                          "processing '%s' (file will be removed):\n%s" 
+                          "" % (fn, exception))
+                    if not allow_exceptions:
+                        raise
+                    if remove_problem_files:
+                        os.remove(fn_full)
+
+
+def walk_and_transform_images_in_place(root_dir, transform_fcn,
+                                       filter_fcn=is_jpeg_or_png,
+                                       allow_exceptions=True,
+                                       remove_problem_files=False):
+    walk_and_transform_files_in_place(
+        root_dir=root_dir, transform_fcn=transform_fcn, filter_fcn=filter_fcn,
+        allow_exceptions=allow_exceptions,
+        remove_problem_files=remove_problem_files)

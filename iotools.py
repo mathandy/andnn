@@ -12,9 +12,9 @@ from cv2 import resize as cv_resize
 # from tflearn.data_utils import build_hdf5_image_dataset
 
 try:
-    from utils import Timer, is_image
+    from util.util import Timer, is_image
 except:
-    from .utils import Timer, is_image
+    from util.util import Timer, is_image
 
 
 exists = os.path.exists

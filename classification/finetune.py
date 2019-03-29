@@ -12,7 +12,6 @@ https://github.com/keras-team/keras/pull/9965
 
 from __future__ import print_function, division, absolute_import
 import tensorflow as tf
-from keras.metrics import sparse_categorical_accuracy
 from keras import applications
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Model, Sequential
@@ -20,7 +19,6 @@ from keras.layers import Dropout, Flatten, Dense
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.callbacks import ModelCheckpoint, EarlyStopping, Callback, TensorBoard
 from keras.optimizers import SGD, RMSprop, Adam, Nadam
-from keras.utils import plot_model
 from sklearn.metrics import classification_report, balanced_accuracy_score
 import numpy as np
 import os
@@ -30,15 +28,15 @@ import tempfile
 
 
 try:
-    from utils import resize_images
+    from util.util import resize_images
     from iotools import image_preloader
     from metrics import pretty_confusion_matrix, top_2_error, top_3_error
     from augmentations import get_augmentation_fcn
 except:
-    from .utils import resize_images
-    from .iotools import image_preloader
-    from .metrics import pretty_confusion_matrix, top_2_error, top_3_error
-    from .augmentations import get_augmentation_fcn
+    from util.util import resize_images
+    from iotools import image_preloader
+    from metrics import pretty_confusion_matrix, top_2_error, top_3_error
+    from augmentations import get_augmentation_fcn
 
 _tmp_storage_dir = os.path.join(tempfile.gettempdir(), 'finetune')
 if not os.path.exists(_tmp_storage_dir):

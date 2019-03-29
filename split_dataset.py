@@ -22,9 +22,9 @@ import numpy as np
 from shutil import copytree
 
 try:
-    from utils import is_image
+    from util.util import is_image
 except:
-    from .utils import is_image
+    from util.util import is_image
 
 
 def move_random(src_dir, dst_dir, n=1, extensions=None):
