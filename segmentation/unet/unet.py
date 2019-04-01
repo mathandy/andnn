@@ -1,6 +1,6 @@
 """
 DS=~/Dropbox
-INPUT=$DS/hand-segmented-fish-new-old-split
+INPUT=$DS/hand-segmented-fish-new-old-split-hiRes
 python3 unet.py train $INPUT --augment -l $DS/unet-logs -k $DS/segmentation-model.h5 -n firstrun
 
 python3 unet.py train $INPUT --augment --show_training_data
@@ -22,15 +22,22 @@ from time import time
 from segmentation_models.losses import bce_jaccard_loss
 from segmentation_models.metrics import iou_score
 from tempfile import tempdir
-
 tempdir = tempdir if tempdir else '/tmp'
 
 try:
-    from iotools import get_data_generators
-    from visualize import visualize
-except:
     from .iotools import get_data_generators
     from ..visualize import visualize
+except:
+    from iotools import get_data_generators
+    from visualize import visualize
+
+# wd = os.getcwd()
+# os.chdir(os.path.dirname(os.path.realpath(__file__)))
+# print(os.getcwd())
+# from iotools import get_data_generators
+# os.chdir(os.pardir)
+# from visualize import visualize
+# os.chdir(wd)
 
 
 class VisualValidation(Callback):
@@ -332,10 +339,10 @@ if __name__ == '__main__':
                       help="Input size (will resize if necessary).")
     args.add_argument("--show_training_data",
                       default=False, action='store_true',
-                      help="Input size (will resize if necessary).")
+                      help="Show training data.")
     args.add_argument("--show_validation_data",
                       default=False, action='store_true',
-                      help="Input size (will resize if necessary).")
+                      help="Show validation data.")
     args.add_argument('-V', "--visual_validation_samples",
                       default=None, nargs='+',
                       help="Image to use for visual validation.  Output "
@@ -357,6 +364,8 @@ if __name__ == '__main__':
         '-C', "--random_crops", default=0.0, type=float,
         help="Probability of sending random crop instead of whole image.")
     args = args.parse_args()
+
+    args.input_size = tuple(args.input_size)
 
     if args.augment:
         keras_augmentations = default_keras_augmentations

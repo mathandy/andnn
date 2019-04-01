@@ -31,8 +31,10 @@ def data_generator(data_dir, batch_size, input_size=(256, 256),
     target_size = input_size
     if random_crops:
         from albumentations import RandomCrop, Compose, Resize
-        target_size = tuple(4 * np.array(input_size))
-        print('\n\nWARNING: Initial resize hard coded to 4 * input_size.\n\n')
+        # target_size = tuple(4 * np.array(input_size))
+        # print('\n\nWARNING: Initial resize hard coded to 4 * input_size.\n\n')
+        target_size = (2592, 3888)
+        print('\n\nWARNING: Initial resize hard coded to (w, h) = (3888, 2592).\n\n')
         crop = Compose([RandomCrop(*input_size[::-1], p=random_crops),
                         Resize(*input_size[::-1], p=1)
                         ], p=1)
