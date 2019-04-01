@@ -104,19 +104,6 @@ def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
     return callbacks
 
 
-# def show_generated_pairs(generator, batch_size):
-#     import cv2 as cv
-#     for image, mask in generator:
-#         for k in range(batch_size):
-#             cmask = np.concatenate([mask[k]] * 3, axis=2)
-#             rgb = np.flip(image[k], 2)
-#             cv.imshow('', np.hstack((rgb, cmask)))
-#             print(image[k].shape, mask[k].shape)
-#             cv.waitKey(10)
-#             input()
-#             cv.destroyAllWindows()
-
-
 def show_generated_pairs(generator, batch_size):
     import cv2 as cv
     for image_batch, mask_batch in generator:
