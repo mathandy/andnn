@@ -395,6 +395,7 @@ def retrain(dataset_dir, base='inceptionv3', pretrained_weights='imagenet',
 
     # if verbose:
         # create nice graphviz graph visualization of model
+        from keras.utils import plot_model
         # plot_model(model, to_file='model.png')
 
         # print the layer names

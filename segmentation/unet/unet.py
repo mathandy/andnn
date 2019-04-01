@@ -122,7 +122,7 @@ def show_generated_pairs(generator, batch_size):
 
 
 def predict(model, image_path, out_path=None, backbone='resnet34',
-            preprocessing_fcn=None, input_size=(256, 256)):
+            preprocessing_fcn=None, input_size=None):
     if preprocessing_fcn is None:
         preprocessing_fcn = get_preprocessing(backbone)
 
@@ -131,7 +131,8 @@ def predict(model, image_path, out_path=None, backbone='resnet34',
         return mask.squeeze().astype('uint8')
 
     x = imread(image_path)
-    x = resize(x, input_size)
+    if input_size is not None:
+        x = resize(x, input_size)
     x = x / 255
     x = preprocessing_fcn(x)
     x = np.expand_dims(x, 0)
@@ -143,7 +144,7 @@ def predict(model, image_path, out_path=None, backbone='resnet34',
 
 
 def predict_all(model, data_dir, out_dir='results', backbone='resnet34',
-                input_size=(256, 256), preprocessing_fcn=None):
+                input_size=None, preprocessing_fcn=None):
     if preprocessing_fcn is None:
         preprocessing_fcn = get_preprocessing(backbone)
 
@@ -269,6 +270,7 @@ default_keras_augmentations = dict(rotation_range=0.2,
                                    zoom_range=0.05,
                                    horizontal_flip=True,
                                    fill_mode='nearest')
+
 
 if __name__ == '__main__':
 
