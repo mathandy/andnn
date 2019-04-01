@@ -331,8 +331,15 @@ if __name__ == '__main__':
         print("Ground truth is red, predictions are green.")
 
     if args['name'] is not None:
-        predicted_polygons = np.load(polygons_path)[args['name']]
-        gt_polygons = np.load(gt_polygons_path)[args['name']]
+        if polygons_path:
+            predicted_polygons = np.load(polygons_path)[args['name']]
+        else:
+            predicted_polygons = None
+        if gt_polygons_path:
+            gt_polygons = np.load(gt_polygons_path)[args['name']]
+        else:
+            gt_polygons = None
+
         visualize(args['name'], 
                   args['visual_out'], 
                   polygons=predicted_polygons,
