@@ -211,7 +211,7 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
     if datumbox_mode and model is None:
         print('\n\nRunning in datumbox mode...\n\n')
         try:
-            from datumbox_model import DatumboxUnet
+            from datumbox_unet import DatumboxUnet
         except:
             from .datumbox_unet import DatumboxUnet
         model = DatumboxUnet(backbone_name=backbone,
