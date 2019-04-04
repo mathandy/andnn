@@ -3,6 +3,8 @@ DS=~/Dropbox
 INPUT=$DS/hand-segmented-fish-new-old-split-hiRes
 python3 unet.py train $INPUT --augment -l $DS/unet-logs -k $DS/segmentation-model.h5 -n firstrun
 
+DS=~/Dropbox
+INPUT=$DS/hand-segmented-fish-new-old-split-hiRes
 python3 unet.py train $INPUT --augment --show_training_data
 """
 from __future__ import absolute_import, print_function, division
@@ -10,8 +12,10 @@ from keras.callbacks import (
     ModelCheckpoint, EarlyStopping, TensorBoard, Callback)
 from keras.models import load_model
 from keras.optimizers import Adam
+from keras.utils import multi_gpu_model
 import numpy as np
 import os
+import cv2 as cv
 from cv2 import resize
 from skimage.io import imread, imsave
 from segmentation_models import Unet
@@ -104,14 +108,13 @@ def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
     return callbacks
 
 
-def show_generated_pairs(generator, batch_size):
-    import cv2 as cv
+def show_generated_pairs(generator, fx=.1, fy=.1):
     for image_batch, mask_batch in generator:
         for image, mask in zip(image_batch, mask_batch):
             bgr = np.flip(image, axis=2)
 
             visual = visualize(bgr, mask)
-            cv.imshow('', visual)
+            cv.imshow('', cv.resize(visual, None, fx=fx, fy=fy))
             print(image.shape, mask.shape)
 
             cv.waitKey(10)
@@ -167,7 +170,7 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
           batch_size=2, all_layer_epochs=100, decode_only_epochs=2,
           logdir='logs', run_name='fish', verbose=2,
           patience=10, checkpoint_path='model_fish.h5', optimizer='adam',
-          input_size=(256, 256), keras_augmentations=None,
+          input_size=None, keras_augmentations=None,
           preprocessing_function_x=None, preprocessing_function_y=None,
           debug_training_data=False, debug_validation_data=False,
           preload=False, cached_preloading=False,
@@ -189,10 +192,10 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
 
     # show images as they're input into model
     if debug_training_data:
-        show_generated_pairs(training_generator, batch_size)
+        show_generated_pairs(training_generator)
         return
     if debug_validation_data:
-        show_generated_pairs(validation_generator, batch_size)
+        show_generated_pairs(validation_generator)
         return
 
     # initialize model
@@ -219,6 +222,8 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
         else:
             raise NotImplementedError(
                 'Adjustable learning rate not implemented for %s.' % optimizer)
+
+    model = multi_gpu_model(model, gpus=2)
     model.compile(optimizer, loss=bce_jaccard_loss, metrics=[iou_score])
     # model.compile(optimizer, 'binary_crossentropy', ['binary_accuracy'])
 
@@ -263,13 +268,12 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
     return model
 
 
-default_keras_augmentations = dict(rotation_range=0.2,
+default_keras_augmentations = dict(rotation_range=20,  # used to be 0.2
                                    width_shift_range=0.05,
                                    height_shift_range=0.05,
-                                   shear_range=0.05,
-                                   zoom_range=0.05,
+                                   zoom_range=0.2,
                                    horizontal_flip=True,
-                                   fill_mode='nearest')
+                                   fill_mode='constant')
 
 
 if __name__ == '__main__':
@@ -409,7 +413,8 @@ if __name__ == '__main__':
                         data_dir=args.input,
                         out_dir=args.output,
                         input_size=args.input_size,
-                        backbone=args.backbone)
+                        backbone=args.backbone,
+                        preprocessing_fcn=get_preprocessing(args.backbone))
         else:
             predict(model=m,
                     image_path=args.input,

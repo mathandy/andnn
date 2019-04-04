@@ -445,3 +445,12 @@ def walk_and_transform_images_in_place(root_dir, transform_fcn,
         root_dir=root_dir, transform_fcn=transform_fcn, filter_fcn=filter_fcn,
         raise_exceptions=raise_exceptions,
         remove_problem_files=remove_problem_files)
+
+
+def find_images(root_dir=os.getcwd(), extensions=('jpg', 'jpeg', 'png')):
+    """Returns list of all image files contained in directory tree."""
+    images = []
+    for directory, _, files in os.walk(root_dir):
+        images += [os.path.join(directory, fn) for fn in files
+                   if is_image(fn, extensions)]
+    return images

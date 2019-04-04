@@ -33,11 +33,52 @@ import cv2 as cv  # v3.4.1
 import numpy as np
 import os
 from skimage.segmentation import slic, mark_boundaries  # v0.10.1
+from sys import stdout
+from time import time
 
-try:
-    from misc import Timer
-except:
-    from .misc import Timer
+
+def pnumber(x, n=5, pad=' '):
+    """Takes in a float, outputs a string of length n."""
+    s = str(x)
+    try:
+        return s[:n]
+    except IndexError:
+        return pad*(n - len(s)) + s
+
+
+class Timer:
+    """A simple tool for timing code while keeping it pretty."""
+
+    def __init__(self, mes='', pretty_time=True, n=4, pad=' ', enable=True):
+        self.mes = mes  # append after `mes` + '...'
+        self.pretty_time = pretty_time
+        self.n = n
+        self.pad = pad
+        self.enabled = enable
+
+    def format_time(self, et, n=4, pad=' '):
+        if self.pretty_time:
+            if et < 60:
+                return '{} sec'.format(pnumber(et, n, pad))
+            elif et < 3600:
+                return '{} min'.format(pnumber(et / 60, n, pad))
+            else:
+                return '{} hrs'.format(pnumber(et / 3600, n, pad))
+        else:
+            return '{} sec'.format(et)
+
+    def __enter__(self):
+        if self.enabled:
+            stdout.write(self.mes + '...')
+            stdout.flush()
+            self.t0 = time()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.t1 = time()
+        if self.enabled:
+            print("done (in {})".format(
+                self.format_time(self.t1 - self.t0, self.n, self.pad)))
+            stdout.flush()
 
 
 DEBUG = False
@@ -319,14 +360,15 @@ def process_segmentation(seg_map, no_transforms=False, scale=.75,
     return seg_map, cumM
 
 
-def process_all(image_dir, out_dir):
+def process_all(image_dir, out_dir, no_transforms=False):
     for fn in os.listdir(image_dir):
         full_fn = os.path.join(image_dir, fn)
 
         affine_transforms = {}
         if fn.lower().endswith('.png'):
             image = cv.imread(full_fn)
-            seg_map, transform = process_segmentation(image)
+            seg_map, transform = \
+                process_segmentation(image, no_transforms=no_transforms)
             affine_transforms[os.path.splitext(fn)[0]] = transform
             cv.imwrite(os.path.join(out_dir, fn), seg_map)
         np.savez(os.path.join(out_dir, 'affine_transforms.npz'),
@@ -438,7 +480,7 @@ def clip_all(originals_dir, segmentations_dir, out_dir, no_transforms=False,
         try:
             # load orginal and segmentation image files
             name = os.path.splitext(fn)[0]
-            original_path = os.path.join(imdir, fn)
+            original_path = os.path.join(originals_dir, fn)
             seg_fn = prefix + name + '.png'
             seg_path = os.path.join(segmentations_dir, seg_fn)
             image, seg_map = cv.imread(original_path), cv.imread(seg_path)
@@ -472,54 +514,79 @@ def clip_all(originals_dir, segmentations_dir, out_dir, no_transforms=False,
 
 
 if __name__ == '__main__':
-    from sys import argv
-    import shutil
-    from review_segmentations import overlay
-    if len(argv) == 2 and argv[1] == 'test':
-        test = '/home/andy/Desktop/yts_segmentations/3_ABJ4.png'
-        test_image = cv.imread(test, 0)
-        test_result, m = process_segmentation(test_image, debug=True)
-        cv.imwrite('test_result.png', test_result)
-    if len(argv) == 2 and argv[1] == 'testclip':
-        seg_map_ = cv.imread('/home/andy/Desktop/yts_segmentations/3_AB1.png')
-        seg_map_ = seg_map_[:, :, 0]
-        image_ = cv.imread('/home/andy/Desktop/all-yts-images/AB1.JPG')
-        with Timer("Clipping Image"):
-            new_image_, new_seg_map_, affine_transform = \
-                clip_image(image_, seg_map_,
-                           n_superpixels=5000,
-                           superpixel_threshold=1)
-        cv.imwrite('test_result.png', overlay(new_image_, seg_map_))
-    elif len(argv) == 2 and argv[1] == 'runall':
-        imdir = '/home/andy/Desktop/yts_segmentations'
-        outdir = '/home/andy/Desktop/yts_segmentations_processed'
-        process_all(imdir, outdir)
-    elif len(argv) == 2 and argv[1] == 'clipall':
-        imdir = '/home/andy/Desktop/yts/deeplab_merged_results/images'
-        segs_dir = '/home/andy/Desktop/yts/deeplab_merged_results/segmentations'
-        outdir = '/home/andy/Desktop/yts/deeplab_merged_results/fixed'
-        os.mkdir(outdir)
-        shutil.copyfile('visualize.py',
-                        os.path.join(outdir, 'visualize.py'))
-        clip_all(imdir, segs_dir, outdir, prefix='')
-    elif len(argv) == 6 and argv[1] == 'clipthis':
-        imdir = argv[2]
-        segs_dir = argv[3]
-        outdir = argv[4]
-        prefix = argv[5]
-        os.mkdir(outdir)
-        shutil.copyfile('visualize.py',
-                        os.path.join(outdir, 'visualize.py'))
-        clip_all(imdir, segs_dir, outdir, prefix=prefix)
-    elif len(argv) == 2 and argv[1] == 'clipallquick':
-        imdir = '/home/andy/Desktop/all-yts-images'
-        segs_dir = '/home/andy/Desktop/yts_segmentations'
-        outdir = '/home/andy/Desktop/yts_quick_segged'
-        clip_all(imdir, segs_dir, outdir, prefix='3_', n_superpixels=[])
-    elif len(argv) == 2 and argv[1] == 'clipalltails':
-        imdir = '/home/andy/Desktop/all-yts-images'
-        segs_dir = '/home/andy/Desktop/yts_segmentations'
-        outdir = '/home/andy/Desktop/yts_clipped_tailless'
-        clip_all(imdir, segs_dir, outdir, prefix='3_', tailless=True)
+    # from sys import argv
+    # import shutil
+    # from review_segmentations import overlay
+    # if len(argv) == 2 and argv[1] == 'test':
+    #     test = '/home/andy/Desktop/yts_segmentations/3_ABJ4.png'
+    #     test_image = cv.imread(test, 0)
+    #     test_result, m = process_segmentation(test_image, debug=True)
+    #     cv.imwrite('test_result.png', test_result)
+    # if len(argv) == 2 and argv[1] == 'testclip':
+    #     seg_map_ = cv.imread('/home/andy/Desktop/yts_segmentations/3_AB1.png')
+    #     seg_map_ = seg_map_[:, :, 0]
+    #     image_ = cv.imread('/home/andy/Desktop/all-yts-images/AB1.JPG')
+    #     with Timer("Clipping Image"):
+    #         new_image_, new_seg_map_, affine_transform = \
+    #             clip_image(image_, seg_map_,
+    #                        n_superpixels=5000,
+    #                        superpixel_threshold=1)
+    #     cv.imwrite('test_result.png', overlay(new_image_, seg_map_))
+    # elif len(argv) == 2 and argv[1] == 'runall':
+    #     imdir = '/home/andy/Desktop/yts_segmentations'
+    #     outdir = '/home/andy/Desktop/yts_segmentations_processed'
+    #     process_all(imdir, outdir)
+    # elif len(argv) == 2 and argv[1] == 'clipall':
+    #     imdir = '/home/andy/Desktop/yts/deeplab_merged_results/images'
+    #     segs_dir = '/home/andy/Desktop/yts/deeplab_merged_results/segmentations'
+    #     outdir = '/home/andy/Desktop/yts/deeplab_merged_results/fixed'
+    #     os.mkdir(outdir)
+    #     shutil.copyfile('visualize.py',
+    #                     os.path.join(outdir, 'visualize.py'))
+    #     clip_all(imdir, segs_dir, outdir, prefix='')
+    # elif len(argv) == 6 and argv[1] == 'clipthis':
+    #     imdir = argv[2]
+    #     segs_dir = argv[3]
+    #     outdir = argv[4]
+    #     prefix = argv[5]
+    #     os.mkdir(outdir)
+    #     shutil.copyfile('visualize.py',
+    #                     os.path.join(outdir, 'visualize.py'))
+    #     clip_all(imdir, segs_dir, outdir, prefix=prefix)
+    # elif len(argv) == 2 and argv[1] == 'clipallquick':
+    #     imdir = '/home/andy/Desktop/all-yts-images'
+    #     segs_dir = '/home/andy/Desktop/yts_segmentations'
+    #     outdir = '/home/andy/Desktop/yts_quick_segged'
+    #     clip_all(imdir, segs_dir, outdir, prefix='3_', n_superpixels=[])
+    # elif len(argv) == 2 and argv[1] == 'clipalltails':
+    #     imdir = '/home/andy/Desktop/all-yts-images'
+    #     segs_dir = '/home/andy/Desktop/yts_segmentations'
+    #     outdir = '/home/andy/Desktop/yts_clipped_tailless'
+    #     clip_all(imdir, segs_dir, outdir, prefix='3_', tailless=True)
+    # else:
+    #     print('CLI arguments not understood.\n  argv =', argv)
+
+    import argparse
+    args = argparse.ArgumentParser()
+    args.add_argument('input',
+                      help="A file or directory.")
+    args.add_argument('output',
+                      help="A file or directory.")
+    args.add_argument('-n', "--normalize", default=False, action='store_true',
+                      help="Center, align, and scale.")
+    args.add_argument('-d', "--debug", default=False, action='store_true',
+                      help="Debug mode (only applicable for single "
+                           "file inputs).")
+    args = args.parse_args()
+
+    if os.path.isdir(args.input):
+        if not os.path.exists(args.output):
+            os.makedirs(args.output)
+        process_all(image_dir=args.input,
+                    out_dir=args.output,
+                    no_transforms=not args.normalize)
     else:
-        print('CLI arguments not understood.\n  argv =', argv)
+        seg_map, cumM = process_segmentation(seg_map=args.input,
+                                             no_transforms=not args.normalize,
+                                             debug=args.debug)
+        cv.imwrite(args.output, seg_map)

@@ -6,6 +6,7 @@ from keras.preprocessing.image import ImageDataGenerator
 import numpy as np
 import os
 from segmentation_models.backbones import get_preprocessing
+import cv2 as cv
 
 
 # try:
@@ -20,7 +21,7 @@ def is_jpeg_or_png(fn):
     return os.path.splitext(fn)[1][1:].lower() in ('jpg', 'jpeg', 'png')
 
 
-def data_generator(data_dir, batch_size, input_size=(256, 256),
+def data_generator(data_dir, batch_size, input_size=None,
                    keras_augmentations=None, preprocessing_function_x=None,
                    preprocessing_function_y=None, preload=False,
                    cached_preloading=False, verbosity=True, mode=None,
@@ -28,16 +29,18 @@ def data_generator(data_dir, batch_size, input_size=(256, 256),
     if keras_augmentations is None:
         keras_augmentations = dict()
 
-    target_size = input_size
     if random_crops:
         from albumentations import RandomCrop, Compose, Resize
         # target_size = tuple(4 * np.array(input_size))
         # print('\n\nWARNING: Initial resize hard coded to 4 * input_size.\n\n')
-        target_size = (2592, 3888)
-        print('\n\nWARNING: Initial resize hard coded to (w, h) = (3888, 2592).\n\n')
-        crop = Compose([RandomCrop(*input_size[::-1], p=random_crops),
-                        Resize(*input_size[::-1], p=1)
-                        ], p=1)
+        # target_size = (3300, 1452)[::-1]
+        crop_size = tuple(np.array(input_size) // 4)
+        print('\n\nWARNING: Crop size hard coded 1/4 of image size.\n\n')
+        # print('\n\nWARNING: Initial resize hard coded to (w, h) = (3300, 1452).\n\n')
+        # crop = Compose([RandomCrop(*crop_size[::-1], p=random_crops),
+        #                 Resize(*input_size[::-1], p=1)
+        #                 ], p=1)
+        crop = RandomCrop(*crop_size[::-1], p=random_crops)
 
     # mask and image generators must use same seed
     keras_seed = np.random.randint(314)
@@ -79,7 +82,7 @@ def data_generator(data_dir, batch_size, input_size=(256, 256),
             classes=['images'],
             class_mode=None,
             color_mode='rgb',
-            target_size=target_size,
+            target_size=input_size,
             batch_size=batch_size,
             seed=keras_seed,
             subset=mode)
@@ -89,7 +92,7 @@ def data_generator(data_dir, batch_size, input_size=(256, 256),
             classes=['segmentations'],
             class_mode=None,
             color_mode='grayscale',
-            target_size=target_size,
+            target_size=input_size,
             batch_size=batch_size,
             seed=keras_seed,
             subset=mode)
@@ -103,7 +106,12 @@ def data_generator(data_dir, batch_size, input_size=(256, 256),
             mask_batch = np.empty((batch_size,) + input_size[::-1] + mask_batch_.shape[3:])
             for k in range(batch_size):
                 cropped = crop(**{'image': image_batch_[k], 'mask': mask_batch_[k]})
-                image_batch[k], mask_batch[k] = cropped['image'], cropped['mask']
+                if (cropped['image'].shape[0] != input_size[1] or
+                    cropped['image'].size[1] != input_size[0]):
+                    image_batch[k] = cv.resize(cropped['image'], dsize=input_size)
+                    mask_batch[k] = cv.resize(cropped['mask'], dsize=input_size)[:, :, None]
+                else:
+                    image_batch[k], mask_batch[k] = cropped['image'], cropped['mask']
         else:
             image_batch, mask_batch = image_batch_, mask_batch_
         yield image_batch / 255, mask_batch / 255
