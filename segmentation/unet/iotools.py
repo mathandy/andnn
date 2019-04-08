@@ -34,13 +34,19 @@ def data_generator(data_dir, batch_size, input_size=None,
         # target_size = tuple(4 * np.array(input_size))
         # print('\n\nWARNING: Initial resize hard coded to 4 * input_size.\n\n')
         # target_size = (3300, 1452)[::-1]
-        crop_size = tuple(np.array(input_size) // 4)
-        print('\n\nWARNING: Crop size hard coded 1/4 of image size.\n\n')
+        # crop_size = tuple(np.array(input_size) // 4)
+        print('\n\nWARNING: Crop size hard coded as 25%-100% of image size.\n\n')
         # print('\n\nWARNING: Initial resize hard coded to (w, h) = (3300, 1452).\n\n')
         # crop = Compose([RandomCrop(*crop_size[::-1], p=random_crops),
         #                 Resize(*input_size[::-1], p=1)
         #                 ], p=1)
-        crop = RandomCrop(*crop_size[::-1], p=random_crops)
+        # crop = RandomCrop(*crop_size[::-1], p=random_crops)
+        def crop(image, mask):
+            h, w = image.shape[:2]
+            rows, cols = np.random.randint(h//4, h), np.random.randint(w//4, w)
+            i0, j0 = np.random.randint(0, h-rows), np.random.randint(0, w-cols)
+            return {'image': image[i0:i0+rows, j0:j0+cols],
+                    'mask': mask[i0:i0+rows, j0:j0+cols]}
 
     # mask and image generators must use same seed
     keras_seed = np.random.randint(314)
@@ -99,21 +105,25 @@ def data_generator(data_dir, batch_size, input_size=None,
 
         pair_generator = zip(image_generator, mask_generator)
 
-    for (image_batch_, mask_batch_) in pair_generator:
+    for (ib, mb) in pair_generator:
 
         if random_crops:
-            image_batch = np.empty((batch_size,) + input_size[::-1] + image_batch_.shape[3:])
-            mask_batch = np.empty((batch_size,) + input_size[::-1] + mask_batch_.shape[3:])
+            image_batch = np.empty((batch_size,) + input_size[::-1] + ib.shape[3:])
+            # mask_batch = np.empty((batch_size,) + input_size[::-1] + mb.shape[3:])
+            mask_batch = np.empty((batch_size,) + input_size[::-1])
             for k in range(batch_size):
-                cropped = crop(**{'image': image_batch_[k], 'mask': mask_batch_[k]})
+                cropped = crop(**{'image': ib[k], 'mask': mb[k]})
                 if (cropped['image'].shape[0] != input_size[1] or
                     cropped['image'].size[1] != input_size[0]):
                     image_batch[k] = cv.resize(cropped['image'], dsize=input_size)
-                    mask_batch[k] = cv.resize(cropped['mask'], dsize=input_size)[:, :, None]
+                    # mask_batch[k] = cv.resize(cropped['mask'], dsize=input_size)[:, :, None]
+                    mask_batch[k] = cv.resize(cropped['mask'][:, :, 0], dsize=input_size)
                 else:
                     image_batch[k], mask_batch[k] = cropped['image'], cropped['mask']
         else:
-            image_batch, mask_batch = image_batch_, mask_batch_
+            image_batch, mask_batch = ib, mb
+            print(image_batch.shape)
+            print(mask_batch.shape)
         yield image_batch / 255, mask_batch / 255
 
 

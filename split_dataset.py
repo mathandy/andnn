@@ -28,9 +28,16 @@ except:
 
 
 def move_random(src_dir, dst_dir, n=1, extensions=None):
+
+    if not os.path.isdir(dst_dir):
+        os.makedirs(dst_dir)
+
     files = os.listdir(src_dir)
     if extensions:
         files = [f for f in files if is_image(f, extensions)]
+
+    if 0 < n < 1:
+        n = int(len(files) * n)
 
     for fn in np.random.choice(files, n, replace=False):
         os.rename(os.path.join(src_dir, fn),
@@ -43,16 +50,21 @@ def move_random_images(src_dir, dst_dir, n=1,
                 extensions=extensions)
 
 
-def make_subset(split_dir, subset, n_subset, remove_unreadable=False):
+def make_subset(split_dir, subset, n_subset, remove_unreadable=False,
+                subdirectory_labels=True):
     train_dir = os.path.join(split_dir, 'train')
     subset_dir = os.path.join(split_dir, subset)
 
     # setup `subset_dir`
     os.mkdir(subset_dir)
-    for category in os.listdir(train_dir):
-        os.mkdir(os.path.join(subset_dir, category))
+    if subdirectory_labels:
+        categories = os.listdir(train_dir)
+        for category in categories:
+            os.mkdir(os.path.join(subset_dir, category))
+    else:
+        categories = ['.']
 
-    for category in os.listdir(train_dir):
+    for category in categories:
         if not os.path.isdir(os.path.join(train_dir, category)):
             continue
 
@@ -73,16 +85,19 @@ def make_subset(split_dir, subset, n_subset, remove_unreadable=False):
                       os.path.join(subset_dir, category, fn))
 
 
-def split_dataset(data_dir, out_dir, n_val, n_test, remove_unreadable=False):
+def split_dataset(data_dir, out_dir, n_val, n_test, remove_unreadable=False,
+                  subdirectory_labels=True):
 
     # copy dataset to training dir
-    os.mkdir(out_dir)
+    os.makedirs(out_dir)
     copytree(data_dir, os.path.join(out_dir, 'train'))
 
     if n_val:
-        make_subset(out_dir, 'val', n_val, remove_unreadable)
+        make_subset(out_dir, 'val', n_val, remove_unreadable,
+                    subdirectory_labels=subdirectory_labels)
     if n_test:
-        make_subset(out_dir, 'test', n_test, remove_unreadable)
+        make_subset(out_dir, 'test', n_test, remove_unreadable,
+                    subdirectory_labels=subdirectory_labels)
 
 
 if __name__ == '__main__':
@@ -104,10 +119,14 @@ if __name__ == '__main__':
     parser.add_argument(
         '-u', '--remove_unreadable', default=False, action='store_true',
         help="Don't include any unreadable images encountered.")
+    parser.add_argument(
+        '-f', '--filename_labels', default=False, action='store_true',
+        help="No subdirectories.")
     args = parser.parse_args()
 
     split_dataset(data_dir=args.data_dir,
                   out_dir=args.out_dir,
                   n_val=args.n_val,
                   n_test=args.n_test,
-                  remove_unreadable=args.remove_unreadable)
+                  remove_unreadable=args.remove_unreadable,
+                  subdirectory_labels=not args.filename_labels)

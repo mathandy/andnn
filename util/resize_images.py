@@ -13,7 +13,7 @@ def resize_images_in_place(root_dir, transform_fcn, filter_fcn=is_jpeg_or_png,
     walk_and_transform_files_in_place(
         root_dir=root_dir, transform_fcn=transform_fcn, filter_fcn=filter_fcn,
         raise_exceptions=raise_exceptions,
-        remove_problem_files=remove_problem_files)
+        remove_problem_files=remove_problem_files,)
 
 
 transforms = ['no_warp_resize']
@@ -37,6 +37,10 @@ if __name__ == '__main__':
                            "to 'images', which means JPEG and PNG files).  "
                            "The options are:\n%s"
                            "" % '\n'.join(filter_dict.keys()))
+    args.add_argument('-b', '--border_type',
+                      default=cv.BORDER_CONSTANT,
+                      help="Border type: 'replicate', 'reflect', "
+                           "'reflect101', 'wrap', or 'constant'.")
     args.add_argument('-e', '--stop_on_exceptions',
                       default=False, action='store_true',
                       help="Report and continue if exception is thrown.")
@@ -51,7 +55,8 @@ if __name__ == '__main__':
     else:
         def transform(fn_in, fn_out):
             resize_preserving_aspect_ratio(
-                image=fn_in, dsize=tuple(args.size), output=fn_out)
+                image=fn_in, dsize=tuple(args.size), output=fn_out,
+                border_type=args.border_type)
 
     walk_and_transform_files_in_place(
         root_dir=args.root_dir,

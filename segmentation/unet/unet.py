@@ -89,18 +89,20 @@ def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
             verbose=int(verbose),
             mode='auto')
     if logdir is not None:
+        # callbacks['TensorBoard'] = TensorBoard(
+        #     log_dir=os.path.join(logdir, run_name),
+        #     histogram_freq=0,
+        #     batch_size=batch_size,
+        #     write_graph=False,
+        #     write_grads=False,
+        #     write_images=False,
+        #     embeddings_freq=0,
+        #     embeddings_layer_names=None,
+        #     embeddings_metadata=None,
+        #     embeddings_data=None,
+        #     update_freq=steps_per_report if steps_per_report else 'epoch')
         callbacks['TensorBoard'] = TensorBoard(
-            log_dir=os.path.join(logdir, run_name),
-            histogram_freq=0,
-            batch_size=batch_size,
-            write_graph=False,
-            write_grads=False,
-            write_images=False,
-            embeddings_freq=0,
-            embeddings_layer_names=None,
-            embeddings_metadata=None,
-            embeddings_data=None,
-            update_freq=steps_per_report if steps_per_report else 'epoch')
+            log_dir=os.path.join(logdir, run_name))
     if visual_validation_samples is not None:
         callbacks['VisualValidation'] = VisualValidation(
             image_paths=visual_validation_samples,
@@ -223,7 +225,7 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
             raise NotImplementedError(
                 'Adjustable learning rate not implemented for %s.' % optimizer)
 
-    model = multi_gpu_model(model, gpus=2)
+    # model = multi_gpu_model(model, gpus=2)
     model.compile(optimizer, loss=bce_jaccard_loss, metrics=[iou_score])
     # model.compile(optimizer, 'binary_crossentropy', ['binary_accuracy'])
 

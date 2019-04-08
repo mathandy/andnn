@@ -11,6 +11,11 @@ import numpy as np
 import cv2 as cv
 
 
+def shuffle_together(*arrays):
+    p = np.random.permutation(len(arrays[0]))
+    return [a[p] for a in arrays]
+
+
 def rescale_by_height(image, target_height, method=cv.INTER_LANCZOS4):
     """Rescale `image` to `target_height` (preserving aspect ratio)."""
     w = int(round(target_height * image.shape[1] / image.shape[0]))
@@ -40,15 +45,36 @@ def is_jpeg_or_png(fn):
     return os.path.splitext(fn)[1][1:].lower() in ('jpg', 'jpeg', 'png')
 
 
+BOARDER_TYPES = {
+
+    'replicate': cv.BORDER_REPLICATE,
+    'reflect': cv.BORDER_REFLECT,
+    'reflect101': cv.BORDER_REFLECT_101,
+    'wrap': cv.BORDER_WRAP,
+    'constant': cv.BORDER_CONSTANT
+}
+
+
 def resize_preserving_aspect_ratio(image, dsize, output=None, color=(0, 0, 0),
-                                   interpolation=cv.INTER_LANCZOS4):
+                                   interpolation=cv.INTER_LANCZOS4,
+                                   border_type=cv.BORDER_CONSTANT):
     """Resize image, using padding if necessary to avoid warping.
 
     dsize = (w, h)
+
+    Border Types
+    ------------
+    * 'replicate':     aaaaaa|abcdefgh|hhhhhhh
+    * 'reflect':       fedcba|abcdefgh|hgfedcb
+    * 'reflect101':   gfedcb|abcdefgh|gfedcba
+    * 'wrap':          cdefgh|abcdefgh|abcdefg
+    * 'constant':      iiiiii|abcdefgh|iiiiiii  with some specified 'i'
     """
 
     if isinstance(image, str):
         image = cv.imread(image)
+    if isinstance(border_type, str):
+        border_type = BOARDER_TYPES[border_type]
 
     image_apect_ratio = image.shape[0] / image.shape[1]
     desired_apect_ratio = dsize[1] / dsize[0]
@@ -66,7 +92,7 @@ def resize_preserving_aspect_ratio(image, dsize, output=None, color=(0, 0, 0),
 
     image = cv.copyMakeBorder(src=image,
                               top=top, bottom=bottom, left=left, right=right,
-                              borderType=cv.BORDER_CONSTANT,
+                              borderType=border_type,
                               value=color)
     if output is not None:
         cv.imwrite(filename=output, img=image)
@@ -454,3 +480,21 @@ def find_images(root_dir=os.getcwd(), extensions=('jpg', 'jpeg', 'png')):
         images += [os.path.join(directory, fn) for fn in files
                    if is_image(fn, extensions)]
     return images
+
+
+def gaussian2d(shape, z0=(0, 0), variance=1):
+    def g(z):
+        x, y = z
+        x0, y0 = z0
+        dx, dy = x-x0, y-y0
+        return np.exp(-(dx*dx + dy*dy)/(2*variance))
+
+    return g(np.meshgrid(*[np.arange(d) for d in shape]))
+
+
+def test_gaussian2d():
+    tmp = '/tmp/gaussian_test.png'
+    g = gaussian2d((100, 100), z0=(25, 50))
+    print('min, max = %s, %s' % (g.min(), g.max()))
+    cv.imwrite(tmp, (g*255).astype('uint8'))
+    os.system('open %s' % tmp)
