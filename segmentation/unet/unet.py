@@ -9,68 +9,40 @@ python3 unet.py train $INPUT --augment --show_training_data
 """
 from __future__ import absolute_import, print_function, division
 from keras.callbacks import (
-    ModelCheckpoint, EarlyStopping, TensorBoard, Callback)
+    ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau, Callback)
+
 from keras.models import load_model
 from keras.optimizers import Adam
-from keras.utils import multi_gpu_model
 import numpy as np
 import os
 import cv2 as cv
-from cv2 import resize
 from skimage.io import imread, imsave
 from segmentation_models import Unet
 from segmentation_models.backbones import get_preprocessing
 from segmentation_models.utils import set_trainable
-from shutil import copyfile
 from time import time
 from segmentation_models.losses import bce_jaccard_loss
 from segmentation_models.metrics import iou_score
 from tempfile import tempdir
 tempdir = tempdir if tempdir else '/tmp'
 
+
 try:
-    from .iotools import get_data_generators
+    from .iotools import get_data_generators, resize
     from ..visualize import visualize
+    from .util import is_image
+    from ...custom_callbacks import VisualValidation, LRFinder
 except:
-    from iotools import get_data_generators
+    from custom_callbacks import VisualValidation, LRFinder
+    from iotools import get_data_generators, resize
     from visualize import visualize
-
-# wd = os.getcwd()
-# os.chdir(os.path.dirname(os.path.realpath(__file__)))
-# print(os.getcwd())
-# from iotools import get_data_generators
-# os.chdir(os.pardir)
-# from visualize import visualize
-# os.chdir(wd)
-
-
-class VisualValidation(Callback):
-    # https://stackoverflow.com/questions/46587605
-
-    def __init__(self, image_paths, output_dir):
-        self.image_paths = image_paths
-        self.outdir = output_dir
-        self.out_imgdir = os.path.join(output_dir, 'images')
-        self.out_segdir = os.path.join(output_dir, 'segmentations')
-        if not os.path.exists(self.out_imgdir):
-            os.makedirs(self.out_imgdir)
-        if not os.path.exists(self.out_segdir):
-            os.makedirs(self.out_segdir)
-
-    def on_epoch_end(self, epoch, logs={}):
-        for image in self.image_paths:
-            name, ext = os.path.splitext(os.path.basename(image))
-            tagged_name = name + '_%05d' % epoch
-            img_out = os.path.join(self.out_imgdir, tagged_name + ext)
-            seg_out = os.path.join(self.out_segdir, tagged_name + '.png')
-
-            copyfile(image, img_out)
-            predict(model=self.model, image_path=image, out_path=seg_out)
+    from util import is_image
 
 
 def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
                   patience=None, logdir=None, run_name=None,
-                  visual_validation_samples=None, steps_per_report=None):
+                  visual_validation_samples=None, steps_per_report=None,
+                  input_size=None, predict_fcn=None):
     callbacks = dict()
     if checkpoint_path is not None:
         callbacks['ModelCheckpoint'] = ModelCheckpoint(
@@ -88,6 +60,16 @@ def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
             patience=patience,
             verbose=int(verbose),
             mode='auto')
+    if patience is not None:
+        callbacks['ReduceLROnPlateau'] = ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.1,
+            patience=patience,
+            verbose=0,
+            mode='auto',
+            min_delta=0.0001,
+            cooldown=0,
+            min_lr=0)
     if logdir is not None:
         # callbacks['TensorBoard'] = TensorBoard(
         #     log_dir=os.path.join(logdir, run_name),
@@ -103,10 +85,12 @@ def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
         #     update_freq=steps_per_report if steps_per_report else 'epoch')
         callbacks['TensorBoard'] = TensorBoard(
             log_dir=os.path.join(logdir, run_name))
-    if visual_validation_samples is not None:
+    if visual_validation_samples is not None and predict_fcn is not None:
         callbacks['VisualValidation'] = VisualValidation(
             image_paths=visual_validation_samples,
-            output_dir=os.path.join(logdir, run_name, 'visual_validation'))
+            output_dir=os.path.join(logdir, run_name, 'visual_validation'),
+            input_size=input_size,
+            predict_fcn=predict_fcn)
     return callbacks
 
 
@@ -156,13 +140,16 @@ def predict_all(model, data_dir, out_dir='results', backbone='resnet34',
     if not os.path.isdir(out_dir):
         os.mkdir(out_dir)
 
-    images = [os.path.join(data_dir, 'val', 'images', fn) for fn in
-              os.listdir(os.path.join(data_dir, 'val', 'images'))]
+    images = []
+    for directory, _, files in os.walk(data_dir):
+        for fn in files:
+            if is_image(fn):
+                images.append(os.path.join(directory, fn))
 
-    for fn in images:
-        name = os.path.splitext(os.path.basename(fn))[0]
+    for fn_full in images:
+        name = os.path.splitext(os.path.basename(fn_full))[0]
         predict(model=model,
-                image_path=fn,
+                image_path=fn_full,
                 out_path=os.path.join(out_dir, name + '.png'),
                 preprocessing_fcn=preprocessing_fcn,
                 input_size=input_size)
@@ -177,7 +164,7 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
           debug_training_data=False, debug_validation_data=False,
           preload=False, cached_preloading=False,
           visual_validation_samples=None, datumbox_mode=False,
-          random_crops=False, learning_rate=None):
+          random_crops=False, learning_rate=None, n_gpus=1):
     # get data generators
     (training_generator, validation_generator,
      training_steps_per_epoch, validation_steps_per_epoch) = \
@@ -225,7 +212,10 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
             raise NotImplementedError(
                 'Adjustable learning rate not implemented for %s.' % optimizer)
 
-    # model = multi_gpu_model(model, gpus=2)
+    if n_gpus > 1:
+        from keras.utils import multi_gpu_model
+        model = multi_gpu_model(model, gpus=n_gpus)
+
     model.compile(optimizer, loss=bce_jaccard_loss, metrics=[iou_score])
     # model.compile(optimizer, 'binary_crossentropy', ['binary_accuracy'])
 
@@ -238,7 +228,9 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
         logdir=logdir,
         run_name=run_name,
         visual_validation_samples=visual_validation_samples,
-        steps_per_report=training_steps_per_epoch)
+        steps_per_report=training_steps_per_epoch,
+        input_size=input_size,
+        predict_fcn=predict)
 
     # train for `decoder_only_epochs` epochs with encoder frozen
     if decode_only_epochs:
@@ -279,21 +271,7 @@ default_keras_augmentations = dict(rotation_range=20,  # used to be 0.2
 
 
 if __name__ == '__main__':
-
-    # # user defaults
-    # DATA_DIR = '/home/andy/Desktop/hand_clipped_split'
-    # RESULTS_DIR = '/mnt/datastore/unet-store/test-results-d'
-    # CHECKPOINT_PATH = '/mnt/datastore/unet-store/model_fish_longrun.h5'
-    # LOG_DIR = '/mnt/datastore/unet-store/logs'
-    # EPOCHS = 100
-
-    # os.system('mkdir %s/segmentations' % RESULTS_DIR)
-    # os.system('mv %s/*.png %s/segmentations' % (RESULTS_DIR, RESULTS_DIR))
-    # os.system('ln -s %s/val/images %s/images' % (DATA_DIR, RESULTS_DIR))
-
-    # parse CLI arguments
     import argparse
-
     args = argparse.ArgumentParser()
     args.add_argument("command",
                       help="'train' or 'predict' (file or directory)")
@@ -346,6 +324,8 @@ if __name__ == '__main__':
                       help="Invoke when using datumbox_keras.")
     args.add_argument('-r', "--learning_rate", default=None, type=float,
                       help="Learning rate for optimizer.")
+    args.add_argument("--n_gpus", default=1, type=int,
+                      help="How many GPUs are available for use.")
     args.add_argument(
         '-p', "--preload", default=False, action='store_true',
         help="If invoked, dataset will be preloaded.")
@@ -383,6 +363,7 @@ if __name__ == '__main__':
         s = '\n'.join("%s: %s" % (key, val) for key, val in vars(args).items())
         f.write(s)
 
+    # go
     if args.command == 'train':
         m = train(data_dir=args.input,
                   model=args.initial_model,
@@ -406,7 +387,8 @@ if __name__ == '__main__':
                   visual_validation_samples=args.visual_validation_samples,
                   datumbox_mode=args.datumbox,
                   random_crops=args.random_crops,
-                  learning_rate=args.learning_rate)
+                  learning_rate=args.learning_rate,
+                  n_gpus=args.n_gpus)
 
     elif args.command == 'predict':
         m = load_model(args.checkpoint_path)

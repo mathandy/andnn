@@ -217,9 +217,14 @@ def bounding_box(where):
 
 
 def only_largest_connected_component(seg_map, debug=False):
+    assert seg_map.max() > 0
     retval, labels = cv.connectedComponents(seg_map)
-    fishy_lbl = 1 + np.array([(labels == i).sum()
-                              for i in range(1, labels.max() + 1)]).argmax()
+    if len(np.unique(labels)) > 1:
+        fishy_lbl = 1 + np.array([(labels == i).sum()
+                                  for i in range(1, labels.max() + 1)]).argmax()
+    else:
+        fishy_lbl = 0
+
     if debug:
         cv.imwrite('dbg_2a_connected_components.png', labels/labels.max()*255)
     return (labels == fishy_lbl) * 255
@@ -248,7 +253,7 @@ def fill_holes(image, invert=True, debug=False):
 
 def process_segmentation(seg_map, no_transforms=False, scale=.75,
                          tailless=False, initial_M=None, invert=False, 
-                         initial_scaling=0.5, debug=DEBUG):
+                         initial_scaling=0.5, debug=DEBUG, threshold=0.5):
     """Does the following post-processing steps (on a binary segmentation map):
         1. eliminate all but largest connected component
         2. fill in holes
@@ -257,6 +262,13 @@ def process_segmentation(seg_map, no_transforms=False, scale=.75,
         5. scale image so width of minimal bounding box is `scale` times the
         image width
     """
+    if seg_map.ndim == 3:
+        assert np.abs(seg_map[:, :, 0] - seg_map[:, :, 1]).max() == 0
+        assert np.abs(seg_map[:, :, 1] - seg_map[:, :, 2]).max() == 0
+        seg_map = seg_map[:, :, 0]
+
+    seg_map = (255 * (seg_map.astype('float') / 255 > threshold)).astype('uint8')
+
     rows, cols = seg_map.shape
 
     if initial_M is None:
@@ -360,7 +372,7 @@ def process_segmentation(seg_map, no_transforms=False, scale=.75,
     return seg_map, cumM
 
 
-def process_all(image_dir, out_dir, no_transforms=False):
+def process_all(image_dir, out_dir, no_transforms=False, threshold=0.5):
     for fn in os.listdir(image_dir):
         full_fn = os.path.join(image_dir, fn)
 
@@ -368,7 +380,9 @@ def process_all(image_dir, out_dir, no_transforms=False):
         if fn.lower().endswith('.png'):
             image = cv.imread(full_fn)
             seg_map, transform = \
-                process_segmentation(image, no_transforms=no_transforms)
+                process_segmentation(image,
+                                     no_transforms=no_transforms,
+                                     threshold=threshold)
             affine_transforms[os.path.splitext(fn)[0]] = transform
             cv.imwrite(os.path.join(out_dir, fn), seg_map)
         np.savez(os.path.join(out_dir, 'affine_transforms.npz'),
@@ -577,6 +591,9 @@ if __name__ == '__main__':
     args.add_argument('-d', "--debug", default=False, action='store_true',
                       help="Debug mode (only applicable for single "
                            "file inputs).")
+    args.add_argument('-t', "--threshold", default=0.5, type=float,
+                      help="0 < threshold < 1 to use if segmentations are "
+                           "probability maps.")
     args = args.parse_args()
 
     if os.path.isdir(args.input):
@@ -584,7 +601,8 @@ if __name__ == '__main__':
             os.makedirs(args.output)
         process_all(image_dir=args.input,
                     out_dir=args.output,
-                    no_transforms=not args.normalize)
+                    no_transforms=not args.normalize,
+                    threshold=args.threshold)
     else:
         seg_map, cumM = process_segmentation(seg_map=args.input,
                                              no_transforms=not args.normalize,

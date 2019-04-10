@@ -15,10 +15,19 @@ import cv2 as cv
 # except:
 #     from .andnn.finetune import preloader
 #     from .andnn.utils import is_jpeg_or_png
+from util import resize_preserving_aspect_ratio as resize
 
 
 def is_jpeg_or_png(fn):
     return os.path.splitext(fn)[1][1:].lower() in ('jpg', 'jpeg', 'png')
+
+
+def crop(image, mask):
+    h, w = image.shape[:2]
+    rows, cols = np.random.randint(h // 4, h), np.random.randint(w // 4, w)
+    i0, j0 = np.random.randint(0, h - rows), np.random.randint(0, w - cols)
+    return {'image': image[i0:i0 + rows, j0:j0 + cols],
+            'mask': mask[i0:i0 + rows, j0:j0 + cols]}
 
 
 def data_generator(data_dir, batch_size, input_size=None,
@@ -30,23 +39,7 @@ def data_generator(data_dir, batch_size, input_size=None,
         keras_augmentations = dict()
 
     if random_crops:
-        from albumentations import RandomCrop, Compose, Resize
-        # target_size = tuple(4 * np.array(input_size))
-        # print('\n\nWARNING: Initial resize hard coded to 4 * input_size.\n\n')
-        # target_size = (3300, 1452)[::-1]
-        # crop_size = tuple(np.array(input_size) // 4)
         print('\n\nWARNING: Crop size hard coded as 25%-100% of image size.\n\n')
-        # print('\n\nWARNING: Initial resize hard coded to (w, h) = (3300, 1452).\n\n')
-        # crop = Compose([RandomCrop(*crop_size[::-1], p=random_crops),
-        #                 Resize(*input_size[::-1], p=1)
-        #                 ], p=1)
-        # crop = RandomCrop(*crop_size[::-1], p=random_crops)
-        def crop(image, mask):
-            h, w = image.shape[:2]
-            rows, cols = np.random.randint(h//4, h), np.random.randint(w//4, w)
-            i0, j0 = np.random.randint(0, h-rows), np.random.randint(0, w-cols)
-            return {'image': image[i0:i0+rows, j0:j0+cols],
-                    'mask': mask[i0:i0+rows, j0:j0+cols]}
 
     # mask and image generators must use same seed
     keras_seed = np.random.randint(314)
@@ -105,26 +98,30 @@ def data_generator(data_dir, batch_size, input_size=None,
 
         pair_generator = zip(image_generator, mask_generator)
 
-    for (ib, mb) in pair_generator:
+    for (unaugmented_image_batch, unaugmented_mask_batch) in pair_generator:
 
         if random_crops:
-            image_batch = np.empty((batch_size,) + input_size[::-1] + ib.shape[3:])
+            image_batch = np.empty((batch_size,) + input_size[::-1] +
+                                   unaugmented_image_batch.shape[3:])
             # mask_batch = np.empty((batch_size,) + input_size[::-1] + mb.shape[3:])
-            mask_batch = np.empty((batch_size,) + input_size[::-1])
+            mask_batch = np.empty((batch_size,) + input_size[::-1] + (1,))
             for k in range(batch_size):
-                cropped = crop(**{'image': ib[k], 'mask': mb[k]})
+                cropped = crop(**{'image': unaugmented_image_batch[k],
+                                  'mask': unaugmented_mask_batch[k]})
                 if (cropped['image'].shape[0] != input_size[1] or
-                    cropped['image'].size[1] != input_size[0]):
-                    image_batch[k] = cv.resize(cropped['image'], dsize=input_size)
-                    # mask_batch[k] = cv.resize(cropped['mask'], dsize=input_size)[:, :, None]
-                    mask_batch[k] = cv.resize(cropped['mask'][:, :, 0], dsize=input_size)
+                    cropped['image'].shape[1] != input_size[0]):
+                    image_batch[k] = resize(cropped['image'], dsize=input_size)
+                    mask_batch[k] = resize(np.squeeze(cropped['mask']), dsize=input_size)[:, :, None]
                 else:
                     image_batch[k], mask_batch[k] = cropped['image'], cropped['mask']
         else:
-            image_batch, mask_batch = ib, mb
-            print(image_batch.shape)
-            print(mask_batch.shape)
-        yield image_batch / 255, mask_batch / 255
+            image_batch, mask_batch = unaugmented_image_batch, unaugmented_mask_batch
+
+        image_batch = image_batch.astype('float32')/255
+        mask_batch = mask_batch.astype('float32')/255
+        # print('\nimage', image_batch.shape, image_batch.dtype, image_batch.min(), image_batch.max())
+        # print('mask', mask_batch.shape, mask_batch.dtype, mask_batch.min(), mask_batch.max())
+        yield image_batch, mask_batch
 
 
 def get_data_generators(data_dir, backbone='resnet34', batch_size=2,

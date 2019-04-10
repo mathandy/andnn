@@ -57,7 +57,8 @@ BOARDER_TYPES = {
 
 def resize_preserving_aspect_ratio(image, dsize, output=None, color=(0, 0, 0),
                                    interpolation=cv.INTER_LANCZOS4,
-                                   border_type=cv.BORDER_CONSTANT):
+                                   border_type=cv.BORDER_CONSTANT,
+                                   return_coordinate_transform=False):
     """Resize image, using padding if necessary to avoid warping.
 
     dsize = (w, h)
@@ -69,6 +70,10 @@ def resize_preserving_aspect_ratio(image, dsize, output=None, color=(0, 0, 0),
     * 'reflect101':   gfedcb|abcdefgh|gfedcba
     * 'wrap':          cdefgh|abcdefgh|abcdefg
     * 'constant':      iiiiii|abcdefgh|iiiiiii  with some specified 'i'
+
+    See Also
+    --------
+    * transform_points_with_resize()
     """
 
     if isinstance(image, str):
@@ -76,6 +81,7 @@ def resize_preserving_aspect_ratio(image, dsize, output=None, color=(0, 0, 0),
     if isinstance(border_type, str):
         border_type = BOARDER_TYPES[border_type]
 
+    original_shape = image.shape
     image_apect_ratio = image.shape[0] / image.shape[1]
     desired_apect_ratio = dsize[1] / dsize[0]
 
@@ -90,12 +96,22 @@ def resize_preserving_aspect_ratio(image, dsize, output=None, color=(0, 0, 0),
     top, bottom = dh//2, dh - (dh//2)
     left, right = dw//2, dw - (dw//2)
 
+    scaled_shape = image.shape
+
     image = cv.copyMakeBorder(src=image,
                               top=top, bottom=bottom, left=left, right=right,
                               borderType=border_type,
                               value=color)
+
+    ho, wo = original_shape[:2]
+    hs, ws = scaled_shape[:2]
+    transform = np.array([[ws/wo, 0,     dw//2],
+                          [0,     hs/ho, dh//2]])
+
     if output is not None:
         cv.imwrite(filename=output, img=image)
+    if return_coordinate_transform:
+        return image, transform
     return image
 
 
