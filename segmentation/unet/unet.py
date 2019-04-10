@@ -42,7 +42,8 @@ except:
 def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
                   patience=None, logdir=None, run_name=None,
                   visual_validation_samples=None, steps_per_report=None,
-                  input_size=None, predict_fcn=None):
+                  input_size=None, predict_fcn=None, steps_per_epoch=None,
+                  epochs=None):
     callbacks = dict()
     if checkpoint_path is not None:
         callbacks['ModelCheckpoint'] = ModelCheckpoint(
@@ -60,16 +61,21 @@ def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
             patience=patience,
             verbose=int(verbose),
             mode='auto')
-    if patience is not None:
-        callbacks['ReduceLROnPlateau'] = ReduceLROnPlateau(
-            monitor='val_loss',
-            factor=0.1,
-            patience=patience,
-            verbose=0,
-            mode='auto',
-            min_delta=0.0001,
-            cooldown=0,
-            min_lr=0)
+    # if patience is not None:
+    #     callbacks['ReduceLROnPlateau'] = ReduceLROnPlateau(
+    #         monitor='val_loss',
+    #         factor=0.1,
+    #         patience=patience,
+    #         verbose=0,
+    #         mode='auto',
+    #         min_delta=0.0001,
+    #         cooldown=0,
+    #         min_lr=0)
+    if True:
+        LRFinder(min_lr=1e-5,
+                 max_lr=1e-2,
+                 steps_per_epoch=steps_per_epoch,
+                 epochs=epochs)
     if logdir is not None:
         # callbacks['TensorBoard'] = TensorBoard(
         #     log_dir=os.path.join(logdir, run_name),
@@ -110,21 +116,32 @@ def show_generated_pairs(generator, fx=.1, fy=.1):
                 return
 
 
-def predict(model, image_path, out_path=None, backbone='resnet34',
-            preprocessing_fcn=None, input_size=None):
+def preprocess(image, input_size=None, backbone='resnet34', preprocessing_fcn=None):
+
+    if isinstance(image, str):
+        image = imread(image)
+
     if preprocessing_fcn is None:
         preprocessing_fcn = get_preprocessing(backbone)
+
+    if input_size is not None:
+        image = resize(image, input_size)
+    image = image / 255
+    image = preprocessing_fcn(image)
+    return np.expand_dims(image, 0)
+
+
+def predict(model, image, out_path=None, backbone='resnet34',
+            preprocessing_fcn=None, input_size=None):
 
     def quantize(mask):
         mask = mask * 255
         return mask.squeeze().astype('uint8')
 
-    x = imread(image_path)
-    if input_size is not None:
-        x = resize(x, input_size)
-    x = x / 255
-    x = preprocessing_fcn(x)
-    x = np.expand_dims(x, 0)
+    x = preprocess(image=image,
+                   input_size=input_size,
+                   backbone=backbone,
+                   preprocessing_fcn=preprocessing_fcn)
     y = model.predict(x)
 
     if out_path is not None:
@@ -149,7 +166,7 @@ def predict_all(model, data_dir, out_dir='results', backbone='resnet34',
     for fn_full in images:
         name = os.path.splitext(os.path.basename(fn_full))[0]
         predict(model=model,
-                image_path=fn_full,
+                image=fn_full,
                 out_path=os.path.join(out_dir, name + '.png'),
                 preprocessing_fcn=preprocessing_fcn,
                 input_size=input_size)
@@ -229,6 +246,8 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
         run_name=run_name,
         visual_validation_samples=visual_validation_samples,
         steps_per_report=training_steps_per_epoch,
+        steps_per_epoch=training_steps_per_epoch,
+        epochs=all_layer_epochs,
         input_size=input_size,
         predict_fcn=predict)
 
@@ -259,10 +278,68 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
                             epochs=all_layer_epochs,
                             callbacks=list(callbacks.values()),
                             initial_epoch=decode_only_epochs)
+
+    evaluate(data_dir=data_dir,
+             model=model,
+             backbone=backbone,
+             batch_size=batch_size,
+             input_size=input_size,
+             n_gpus=n_gpus,
+             preprocessing_function_x=preprocessing_function_x,
+             preprocessing_function_y=preprocessing_function_y)
     return model
 
 
-default_keras_augmentations = dict(rotation_range=20,  # used to be 0.2
+def evaluate(data_dir, model=None, backbone='resnet34', batch_size=2,
+             input_size=None, n_gpus=1,
+             preprocessing_function_x=None, preprocessing_function_y=None):
+
+    # initialize model
+    if isinstance(model, str):
+        model = load_model(model)
+
+    if n_gpus > 1:
+        from keras.utils import multi_gpu_model
+        model = multi_gpu_model(model, gpus=n_gpus)
+
+    # get data generators
+    (training_generator, validation_generator,
+     training_steps_per_epoch, validation_steps_per_epoch) = \
+        get_data_generators(data_dir=data_dir,
+                            backbone=backbone,
+                            batch_size=batch_size,
+                            input_size=input_size,
+                            keras_augmentations=None,
+                            preprocessing_function_x=preprocessing_function_x,
+                            preprocessing_function_y=preprocessing_function_y,
+                            preload=False,
+                            cached_preloading=False,
+                            random_crops=False)
+
+    # evaluate on training data
+    print('\n\nTraining Scores\n' + '-'*14)
+    results = model.evaluate_generator(generator=training_generator,
+                                       steps=None,
+                                       max_queue_size=10,
+                                       workers=1,
+                                       use_multiprocessing=False,
+                                       verbose=0)
+    for name, value in zip(model.metrics_names, list(results)):
+        print(name + ':', value)
+
+    # evaluate on training data
+    print('\n\nValidation Scores\n' + '-'*16)
+    results = model.evaluate_generator(generator=training_generator,
+                                       steps=None,
+                                       max_queue_size=10,
+                                       workers=1,
+                                       use_multiprocessing=False,
+                                       verbose=0)
+    for name, value in zip(model.metrics_names, list(results)):
+        print(name + ':', value)
+
+
+DEFAULT_KERAS_AUGMENTATIONS = dict(rotation_range=20,  # used to be 0.2
                                    width_shift_range=0.05,
                                    height_shift_range=0.05,
                                    zoom_range=0.2,
@@ -343,7 +420,7 @@ if __name__ == '__main__':
     args.input_size = tuple(args.input_size)
 
     if args.augment:
-        keras_augmentations = default_keras_augmentations
+        keras_augmentations = DEFAULT_KERAS_AUGMENTATIONS
     else:
         keras_augmentations = None
 
@@ -389,6 +466,14 @@ if __name__ == '__main__':
                   random_crops=args.random_crops,
                   learning_rate=args.learning_rate,
                   n_gpus=args.n_gpus)
+    elif args.command == 'evaluate':
+        m = load_model(args.checkpoint_path)
+        evaluate(data_dir=args.input,
+                 model=m,
+                 backbone=args.backbone,
+                 batch_size=args.batch_size,
+                 input_size=args.input_size,
+                 n_gpus=args.n_gpus)
 
     elif args.command == 'predict':
         m = load_model(args.checkpoint_path)
@@ -401,7 +486,7 @@ if __name__ == '__main__':
                         preprocessing_fcn=get_preprocessing(args.backbone))
         else:
             predict(model=m,
-                    image_path=args.input,
+                    image=args.input,
                     out_path=args.output,
                     backbone=args.backbone,
                     preprocessing_fcn=get_preprocessing(args.backbone),
