@@ -71,7 +71,7 @@ def get_callbacks(checkpoint_path=None, verbose=None, batch_size=None,
     #         min_delta=0.0001,
     #         cooldown=0,
     #         min_lr=0)
-    if True:
+    if steps_per_epoch is not None and epochs is not None:
         LRFinder(min_lr=1e-5,
                  max_lr=1e-2,
                  steps_per_epoch=steps_per_epoch,
@@ -279,14 +279,27 @@ def train(data_dir, model=None, backbone='resnet34', encoder_weights='imagenet',
                             callbacks=list(callbacks.values()),
                             initial_epoch=decode_only_epochs)
 
-    evaluate(data_dir=data_dir,
-             model=model,
-             backbone=backbone,
-             batch_size=batch_size,
-             input_size=input_size,
-             n_gpus=n_gpus,
-             preprocessing_function_x=preprocessing_function_x,
-             preprocessing_function_y=preprocessing_function_y)
+    # evaluate on training data
+    print('\n\nTraining Scores\n' + '-'*14)
+    results = model.evaluate_generator(generator=training_generator,
+                                       steps=training_steps_per_epoch,
+                                       max_queue_size=10,
+                                       workers=1,
+                                       use_multiprocessing=False,
+                                       verbose=0)
+    for name, value in zip(model.metrics_names, list(results)):
+        print(name + ':', value)
+
+    # evaluate on training data
+    print('\n\nValidation Scores\n' + '-'*16)
+    results = model.evaluate_generator(generator=training_generator,
+                                       steps=validation_steps_per_epoch,
+                                       max_queue_size=10,
+                                       workers=1,
+                                       use_multiprocessing=False,
+                                       verbose=0)
+    for name, value in zip(model.metrics_names, list(results)):
+        print(name + ':', value)
     return model
 
 
@@ -418,6 +431,8 @@ if __name__ == '__main__':
     args = args.parse_args()
 
     args.input_size = tuple(args.input_size)
+    w, h = args.input_size
+    assert w//32 == w/32. and h//32 == h/32.
 
     if args.augment:
         keras_augmentations = DEFAULT_KERAS_AUGMENTATIONS
