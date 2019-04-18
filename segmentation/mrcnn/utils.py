@@ -301,7 +301,7 @@ class Dataset(object):
     def prepare(self, class_map=None):
         """Prepares the Dataset class for use.
 
-        TODO: class map is not supported yet. When done, it should handle mapping
+        TODO-PROGRESS: class map is not supported yet. When done, it should handle mapping
               classes from different datasets to the same class ID.
         """
 
@@ -570,7 +570,7 @@ def expand_mask(bbox, mini_mask, image_shape):
     return mask
 
 
-# TODO: Build and use this function to reduce code duplication
+# TODO-PROGRESS: Build and use this function to reduce code duplication
 def mold_mask(mask, config):
     pass
 
@@ -695,7 +695,7 @@ def compute_matches(gt_boxes, gt_class_ids, gt_masks,
         overlaps: [pred_boxes, gt_boxes] IoU overlaps.
     """
     # Trim zero padding
-    # TODO: cleaner to do zero unpadding upstream
+    # TODO-PROGRESS: cleaner to do zero unpadding upstream
     gt_boxes = trim_zeros(gt_boxes)
     gt_masks = gt_masks[..., :gt_boxes.shape[0]]
     pred_boxes = trim_zeros(pred_boxes)

@@ -33,10 +33,10 @@ try:
     from metrics import pretty_confusion_matrix, top_2_error, top_3_error
     from augmentations import get_augmentation_fcn
 except:
-    from util.util import resize_images
-    from iotools import image_preloader
-    from metrics import pretty_confusion_matrix, top_2_error, top_3_error
-    from augmentations import get_augmentation_fcn
+    from ..util.util import resize_images
+    from ..iotools import image_preloader
+    from ..metrics import pretty_confusion_matrix, top_2_error, top_3_error
+    from ..augmentations import get_augmentation_fcn
 
 _tmp_storage_dir = os.path.join(tempfile.gettempdir(), 'finetune')
 if not os.path.exists(_tmp_storage_dir):
@@ -158,18 +158,17 @@ def create_pretrained_model(n_classes, input_shape, input_tensor=None,
 
     # freeze some layers
     # n_freeze = 314 - 65  # fine-tune top two inception blocks + head
-    if n_freeze:
+    if n_freeze > 0:
         for layer in model.layers[:n_freeze]:
             layer.trainable = False
         for layer in model.layers[n_freeze:]:
             layer.trainable = True
-    else:
+    elif n_freeze == -1:
         for layer in base_model.layers:
             layer.trainable = False
-
-    # for k, layer in enumerate(model.layers):
-    #     print(k, layer.name)
-    # import ipdb; ipdb.set_trace()  ### DEBUG
+    else:
+        for layer in base_model.layers:
+            layer.trainable = True
 
     # compile
     model.compile(optimizer=SGD(lr=learning_rate, momentum=momentum),
@@ -558,7 +557,8 @@ if __name__ == '__main__':
              "Only applies if `optimizer=='sgd'`")
     parser.add_argument(
         "--n_freeze", default=0, type=int,
-        help="Number of (from bottom) layers to freeze.  Use 0 for head only.")
+        help="Number of (from bottom) layers to freeze.  "
+             "Use -1 for head only, 0 for all layers.")
     parser.add_argument(
         "--logdir", default=os.path.join(_tmp_storage_dir, 'logs'),
         help="Where to store tensorboard logs.")
