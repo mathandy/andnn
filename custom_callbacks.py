@@ -34,8 +34,8 @@ class VisualValidation(Callback):
 
 class LRFinder(Callback):
     
-    '''
-    A simple callback for finding the optimal learning rate range for your model + dataset. 
+    """
+    A callback for finding the optimal learning rate(s) for your model/dataset.
     
     # Usage
         ```python
@@ -51,16 +51,19 @@ class LRFinder(Callback):
     # Arguments
         min_lr: The lower bound of the learning rate range for the experiment.
         max_lr: The upper bound of the learning rate range for the experiment.
-        steps_per_epoch: Number of mini-batches in the dataset. Calculated as `np.ceil(epoch_size/batch_size)`. 
-        epochs: Number of epochs to run experiment. Usually between 2 and 4 epochs is sufficient. 
+        steps_per_epoch: Number of mini-batches in the dataset. 
+            Calculated as `np.ceil(epoch_size/batch_size)`. 
+        epochs: Number of epochs to run experiment. Usually between 2 
+            and 4 epochs is sufficient. 
         
     # Credit/References
         Blog post: jeremyjordan.me/nn-learning-rate
         Original paper: https://arxiv.org/abs/1506.01186
 
-    '''
+    """
     
-    def __init__(self, min_lr=1e-5, max_lr=1e-2, steps_per_epoch=None, epochs=None):
+    def __init__(self, min_lr=1e-5, max_lr=1e-2, steps_per_epoch=None, epochs=4, 
+                 plot_filename='LRFinder_plot.png'):
         super().__init__()
         
         self.min_lr = min_lr
@@ -68,19 +71,20 @@ class LRFinder(Callback):
         self.total_iterations = steps_per_epoch * epochs
         self.iteration = 0
         self.history = {}
+        self.plot_filename = plot_filename
         
     def clr(self):
-        '''Calculate the learning rate.'''
+        """Calculate the learning rate."""
         x = self.iteration / self.total_iterations 
         return self.min_lr + (self.max_lr-self.min_lr) * x
         
     def on_train_begin(self, logs=None):
-        '''Initialize the learning rate to the minimum value at the start of training.'''
+        """Initialize the learning rate to the minimum value at the start of training."""
         logs = logs or {}
         K.set_value(self.model.optimizer.lr, self.min_lr)
         
     def on_batch_end(self, epoch, logs=None):
-        '''Record previous batch statistics and update the learning rate.'''
+        """Record previous batch statistics and update the learning rate."""
         logs = logs or {}
         self.iteration += 1
 
@@ -93,7 +97,7 @@ class LRFinder(Callback):
         K.set_value(self.model.optimizer.lr, self.clr())
  
     def plot_lr(self):
-        '''Helper function to quickly inspect the learning rate schedule.'''
+        """Helper function to quickly inspect the learning rate schedule."""
         import matplotlib.pyplot as plt
         plt.plot(self.history['iterations'], self.history['lr'])
         plt.yscale('log')
@@ -102,18 +106,17 @@ class LRFinder(Callback):
         plt.show()
         
     def plot_loss(self):
-        '''Helper function to quickly observe the learning rate experiment results.'''
+        """Helper function to quickly observe the learning rate experiment results."""
         import matplotlib.pyplot as plt
         plt.plot(self.history['lr'], self.history['loss'])
         plt.xscale('log')
         plt.xlabel('Learning rate')
         plt.ylabel('Loss')
-        plt.show()
-
+        plt.savefig(self.plot_filename)
 
 
 class SGDRScheduler(Callback):
-    '''Cosine annealing learning rate scheduler with periodic restarts.
+    """Cosine annealing learning rate scheduler with periodic restarts.
     # Usage
         ```python
             schedule = SGDRScheduler(min_lr=1e-5,
@@ -139,7 +142,7 @@ class SGDRScheduler(Callback):
         Original paper: http://arxiv.org/abs/1608.03983
     # See Also
         http://cs231n.github.io/neural-networks-3/#annealing-the-learning-rate
-    '''
+    """
     def __init__(self,
                  min_lr,
                  max_lr,
@@ -163,18 +166,18 @@ class SGDRScheduler(Callback):
         self.history = {}
 
     def clr(self):
-        '''Calculate the learning rate.'''
+        """Calculate the learning rate."""
         fraction_to_restart = self.batch_since_restart / (self.steps_per_epoch * self.cycle_length)
         lr = self.min_lr + 0.5 * (self.max_lr - self.min_lr) * (1 + np.cos(fraction_to_restart * np.pi))
         return lr
 
     def on_train_begin(self, logs={}):
-        '''Initialize the learning rate to the minimum value at the start of training.'''
+        """Initialize the learning rate to the minimum value at the start of training."""
         logs = logs or {}
         K.set_value(self.model.optimizer.lr, self.max_lr)
 
     def on_batch_end(self, batch, logs={}):
-        '''Record previous batch statistics and update the learning rate.'''
+        """Record previous batch statistics and update the learning rate."""
         logs = logs or {}
         self.history.setdefault('lr', []).append(K.get_value(self.model.optimizer.lr))
         for k, v in logs.items():
@@ -184,7 +187,7 @@ class SGDRScheduler(Callback):
         K.set_value(self.model.optimizer.lr, self.clr())
 
     def on_epoch_end(self, epoch, logs={}):
-        '''Check for end of current cycle, apply restarts when necessary.'''
+        """Check for end of current cycle, apply restarts when necessary."""
         if epoch + 1 == self.next_restart:
             self.batch_since_restart = 0
             self.cycle_length = np.ceil(self.cycle_length * self.mult_factor)
@@ -193,5 +196,5 @@ class SGDRScheduler(Callback):
             self.best_weights = self.model.get_weights()
 
     def on_train_end(self, logs={}):
-        '''Set weights to the values from the end of the most recent cycle for best performance.'''
+        """Set weights to the values from the end of the most recent cycle for best performance."""
         self.model.set_weights(self.best_weights)

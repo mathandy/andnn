@@ -378,18 +378,22 @@ def retrain(dataset_dir, base='inceptionv3', pretrained_weights='imagenet',
                                            input_shape=img_shape,
                                            input_tensor=None)
     else:
+        if pretrained_weights in [None, 'scratch', 'none']:
+            base_weights = None
+        else:
+            base_weights = pretrained_weights
         model = create_pretrained_model(
             n_classes=len(class_names),
             input_shape=img_shape,
             input_tensor=None,
             base=base,
-            base_weights=None if (pretrained_weights == 'scratch') else 'imagenet',
+            base_weights=base_weights,
             metrics=['accuracy'],
             learning_rate=learning_rate,
             momentum=momentum,
             n_freeze=n_freeze)
 
-    if pretrained_weights not in ('imagenet', 'scratch'):
+    if pretrained_weights not in ('imagenet', 'scratch', 'none', None):
         model.load_weights(pretrained_weights)
 
     # if verbose:
