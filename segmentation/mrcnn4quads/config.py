@@ -203,6 +203,12 @@ class Config(object):
     # Gradient norm clipping
     GRADIENT_CLIP_NORM = 5.0
 
+    # Number of regression targets (i.e. vector size output at each pixel)
+    N_REGRESSION_TARGETS = 8  # use 4 for original mask r-cnn behavior
+
+    # see `model.norm_polygons_graph` docstring
+    ARGMAX_INDICES = []
+
     def __init__(self):
         """Set values of computed attributes."""
         # Effective batch size
