@@ -20,6 +20,8 @@ import keras
 from util import resize_preserving_aspect_ratio, gaussian2d
 from augmentations import get_augmentation_fcn2
 
+from mrcnn.model import build_rpn_targets
+
 
 def points2mask(points, image_shape, use_gaussian=False, fill=False):
     """Returns n-channel mask given n x 2 array of xy-points."""
@@ -472,6 +474,11 @@ class ProposalsGenerator(PointsDataGenerator):
                 batch_objectiveness_gt.astype('float32'))
 
     def get_proposal_gt(self, points_batch):
+        rpn_match, rpn_bbox_deltas = build_rpn_targets(image_shape=None,
+                                                anchors,
+                                                gt_class_ids,
+                                                gt_boxes,
+                                                config)
         for pts in points_batch:
             pass
         return None, None
@@ -484,6 +491,9 @@ TODO NEXT:  currently everything set up for fixed number of points
 https://github.com/rbgirshick/py-faster-rcnn/blob/master/lib/rpn/anchor_target_layer.py
 MIT LICENSED! https://github.com/facebookresearch/Detectron/blob/master/detectron/utils/boxes.py
 
+
+check how loss is done in retina u-net and see if it's simpler
+https://github.com/pfjaeger/medicaldetectiontoolkit/blob/master/models/retina_unet.py#L169
 if __name__ == '__main__':
 
     # for testing that the data is being input as expected

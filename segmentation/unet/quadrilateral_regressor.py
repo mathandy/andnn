@@ -42,6 +42,7 @@ from data_loader import PointsDataGenerator, pmask2points, mark_image
 TODO:
     1. make data generator (that includes anchor boxes)
     2. implement a smooth homography template matching loss
+    3. add regularization term to loss like matterport mask r-cnn ?
 
 
 def homography_loss():
